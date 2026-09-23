@@ -1,0 +1,216 @@
+openapi: 3.0.1
+info:
+  title: Tutor Scheduler Bot API
+  description: |
+    API бэкенд-сервиса для автоматизации расписания репетиторов. 
+    Обеспечивает управление сеткой доступности (для репетиторов) и бронирование/отмену занятий (для учеников).
+    
+    Все временные метки передаются и принимаются в формате ISO 8601 (строго UTC).
+  version: 1.0.0
+
+servers:
+  - url: https://example.com
+    description: Production сервер
+
+tags:
+  - name: Tutors
+    description: Операции, доступные только для преподавателей (управление расписанием)
+  - name: Students
+    description: Операции, доступные для учеников (просмотр, запись и отмена)
+
+paths:
+  /tutor/slots:
+    post:
+      tags:
+        - Tutors
+      summary: Массовая генерация слотов
+      description: Разделяет переданные временные интервалы на часовые слоты и создает записи в БД (UC-1, BR-03).
+      security:
+        - TelegramAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tutor_id
+                - date
+                - intervals
+              properties:
+                tutor_id:
+                  type: integer
+                  example: 1024
+                  description: Внутренний ID репетитора в системе
+                date:
+                  type: string
+                  format: date
+                  example: "2026-10-15"
+                  description: Дата, на которую генерируется расписание
+                intervals:
+                  type: array
+                  description: Список временных интервалов доступности (в локальном времени репетитора)
+                  items:
+                    type: object
+                    required:
+                      - start_time
+                      - end_time
+                    properties:
+                      start_time:
+                        type: string
+                        example: "14:00"
+                      end_time:
+                        type: string
+                        example: "18:00"
+      responses:
+        '201':
+          description: Сетка слотов успешно сгенерирована
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  slots_created:
+                    type: integer
+                    example: 4
+                    description: Количество успешно созданных слотов
+        '400':
+          description: Ошибка валидации (например, дата в прошлом или неверный формат времени)
+        '403':
+          description: Доступ запрещен (пользователь не является репетитором)
+        '409':
+          description: Конфликт расписания (частичное наложение на уже существующие слоты)
+
+  /student/slots:
+    get:
+      tags:
+        - Students
+      summary: Получить доступные слоты для бронирования
+      description: Возвращает список всех активных слотов со статусом FREE для выбранного репетитора. Время автоматически конвертируется в таймзону ученика (UC-2, BR-01).
+      security:
+        - TelegramAuth: []
+      parameters:
+        - name: tutor_id
+          in: query
+          required: true
+          description: Идентификатор репетитора, к которому производится запись
+          schema:
+            type: integer
+            example: 1024
+      responses:
+        '200':
+          description: Список свободных слотов успешно получен
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    slot_id:
+                      type: integer
+                      example: 5842
+                    start_time:
+                      type: string
+                      format: date-time
+                      example: "2026-10-15T11:00:00Z"
+                    end_time:
+                      type: string
+                      format: date-time
+                      example: "2026-10-15T12:00:00Z"
+        '401':
+          description: Не авторизован
+
+  /student/slots/{slot_id}/book:
+    post:
+      tags:
+        - Students
+      summary: Забронировать доступное время для ученика
+      description: Закрепляет свободный слот за учеником, меняет статус на BOOKED и создает задачу в очереди уведомлений (UC-2).
+      security:
+        - TelegramAuth: []
+      parameters:
+        - name: slot_id
+          in: path
+          required: true
+          description: Идентификатор временного слота
+          schema:
+            type: integer
+            example: 5842
+      responses:
+        '200':
+          description: Слот успешно забронирован
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Slot successfully booked."
+        '404':
+          description: Слот не найден
+        '409':
+          description: Слот уже занят другим пользователем (Конфликт параллельного доступа при конкурентной записи)
+
+  /student/slots/{slot_id}/cancel:
+    post:
+      tags:
+        - Students
+      summary: Отмена записи учеником
+      description: Изменяет статус слота с BOOKED на FREE и аннулирует задачу в очереди уведомлений (UC-3, BR-02).
+      security:
+        - TelegramAuth: []
+      parameters:
+        - name: slot_id
+          in: path
+          required: true
+          description: Идентификатор временного слота (занятия)
+          schema:
+            type: integer
+            example: 5842
+      responses:
+        '200':
+          description: Занятие успешно отменено, слот снова свободен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Appointment canceled successfully. Slot is now free."
+        '400':
+          description: Некорректный формат ID слота
+        '404':
+          description: Занятие с таким ID не найдено
+        '409':
+          description: Нарушение бизнес-правила (поздняя отмена менее чем за 3 часа до начала)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "ERR_LATE_CANCELLATION"
+                  message:
+                    type: string
+                    example: "Cannot cancel appointment less than 3 hours before start."
+
+components:
+  securitySchemes:
+    TelegramAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Строка валидации инициализационных данных Telegram (initData), подписанная ботом.
