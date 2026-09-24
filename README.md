@@ -1,7 +1,8 @@
 # Портфолио системного аналитика | Ксения Тимофеева
 
 Зравствуйте! Я Ксения 👩‍💻 
-Системный аналитик (System Analyst) с крепким бэкграундом в Backend-разработке.
+
+Системный аналитик с крепким бэкграундом в Backend-разработке.
 
 До перехода в системный анализ я занималась разработкой backend-сервисов на **Node.js / NestJS / TypeScript**, работала с **PostgreSQL, REST API, интеграциями и проектированием структуры данных**.
 
@@ -82,7 +83,7 @@
 
 ---
 
-# 🔍 На что обращаю внимание при проектировании
+# На что обращаю внимание при проектировании
 
 ### Не только happy path
 
@@ -118,8 +119,10 @@
 
 ---
 
-# 📬 Контакты
+# Контакты
 
 **Telegram:** [@qseena](https://t.me/qseena)
+
 **Email:** [ksen.teem@gmail.com](mailto:ksen.teem@gmail.com)
+
 **LinkedIn:** [linkedin.com/in/kseniya-timofeeva](https://www.linkedin.com/in/kseniya-timofeeva/)
